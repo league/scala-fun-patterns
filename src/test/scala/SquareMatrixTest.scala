@@ -1,21 +1,28 @@
 import org.scalacheck._
+import org.scalacheck.Prop._
 
-object StringSpecification extends Properties("String") {
-  property("startsWith") = Prop.forAll((a: String, b: String) => (a+b).startsWith(a))
+object QuadTreeCreateSpec extends Properties("quad tree create") {
 
-  property("endsWith") = Prop.forAll((a: String, b: String) => (a+b).endsWith(b))
+  type M[A] = QuadTreeSquareMatrix[A]
+  val factory = QuadTreeSquareMatrix
 
-  // Is this really always true?
-  property("concat") = Prop.forAll((a: String, b: String) => 
-    (a+b).length > a.length && (a+b).length > b.length
-  )
+  val powerOfTwo = Gen.choose(0,10).map(1 << _)
+  val fillMatrix = for { n <- powerOfTwo ; c <- Gen.alphaChar }
+                   yield factory.fill(n)(c)
+  val pairMatrix = powerOfTwo.map(factory.tabulate(_){(i,j)=>(i,j)})
+  def coord[A](m: M[A]) = for {i <- Gen.choose(0, m.height-1);
+                               j <- Gen.choose(0, m.width-1)}
+                          yield (i,j)
 
-  property("substring") = Prop.forAll((a: String, b: String) => 
-    (a+b).substring(a.length) == b
-  )
+  property("bounds") = Prop.forAll(fillMatrix) {
+    m:M[Char] => Prop.forAll(coord(m)) {
+      ij => m(ij) == m(0,0)
+    }
+  }
 
-  property("substring") = Prop.forAll((a: String, b: String, c: String) =>
-    (a+b+c).substring(a.length, a.length+b.length) == b
-  )
+  property("coords") = Prop.forAll(pairMatrix) {
+    m => Prop.forAll(coord(m)) {
+      ij => m(ij) == ij
+    }
+  }
 }
-
