@@ -54,8 +54,8 @@ case class QT_Succ[A](
   val exponent = 1 + subm.exponent
   override def toString: String= "Succ " + subm.toString
   def apply(i: Int, j: Int): A = {
-    val q = subm(i % subm.dimension, j % subm.dimension)
-    (i / subm.dimension, j / subm.dimension) match {
+    val q = subm(i/2, j/2)
+    (i%2, j%2) match {
       case (0,0) => q._1
       case (0,1) => q._2
       case (1,0) => q._3
