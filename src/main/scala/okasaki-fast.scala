@@ -1,50 +1,91 @@
-type Quad[A] = (A,A,A,A)
 
-object TopDown {
-  abstract class Square[A]
-  case class Zero[A](value: A) extends Square[A]
-  case class Succ[A](value: Quad[Square[A]]) extends Square[A]
+trait Matrix[A] extends Function2[Int,Int,A] {
+  def width: Int
+  def height: Int
+  def size: (Int,Int) = (width, height)
+  def apply(coord: (Int,Int)): A = apply(coord._1, coord._2)
+  def updated(i: Int, j: Int, elem: A): Matrix[A]
 }
-object BottomUp {
-  abstract class Square[A] {
-    val base: Int
-    val dim: Int
-  }
-  case class Zero[A](value: A) extends Square[A] {
-    val base = 0
-    val dim = 1
-  }
-  case class Succ[A](value: Square[Quad[A]]) extends Square[A] {
-    val base = value.base + 1
-    val dim = value.dim * 2
-  }
-  val m1 = Zero(3)
-  val m2 = Succ(Zero((4,5,6,7)))
-  val m3 = Succ(Succ(Zero(((1,2,3,4),(2,3,4,5),(3,4,5,6),(4,5,6,7)))))
 
-  def create[A](n: Int, x: => A): Square[A] = n match {
-    case 0 => Zero(x)
-    case _ => Succ(create(n-1, (x,x,x,x)))
-  }
+trait MatrixFactory[M[A] <: Matrix[A]] {
+  def fill[A](n1: Int, n2: Int)(elem: => A): M[A]
+  def tabulate[A](n1: Int, n2: Int)(f:(Int,Int) => A): M[A]
+}
 
-  def tabulate[A](n: Int, f: (Int, Int) => A): Square[A] =
-    if(n == 0) Zero(f(0,0))
-    else Succ(tabulate(n-1, {(i,j) => (f(i*2, j*2),
-                                       f(i*2, j*2+1),
-                                       f(i*2+1, j*2),
-                                       f(i*2+1, j*2+1))}))
-  def index[A,R](m: Square[A], i: Int, j: Int, k: A => R): R =
-    m match {
-      case Zero(data) => if(i == 0 && j == 0) k(data)
-                         else error("out of bounds")
-      case Succ(subm) => index(subm, i % subm.dim, j % subm.dim,
-                               (q:Quad[A]) => (i / subm.dim, j / subm.dim) match {
-                                 case (0,0) => k(q._1)
-                                 case (0,1) => k(q._2)
-                                 case (1,0) => k(q._3)
-                                 case (1,1) => k(q._4)
-                                 case _ => error("out of bounds")
-                               })
+trait SquareMatrix[A] extends Matrix[A] {
+  def dimension: Int
+  override def width: Int = dimension
+  override def height: Int = dimension
+}
+
+trait SquareMatrixFactory[M[A] <: SquareMatrix[A]]
+extends MatrixFactory[M] {
+  def fill[A](n: Int)(elem: => A): M[A]
+  def fill[A](n1: Int, n2: Int)(elem: => A): M[A] = {
+    require(n1 == n2)
+    fill(n1)(elem)
+  }
+  def tabulate[A](n: Int)(f:(Int,Int) => A): M[A]
+  def tabulate[A](n1: Int, n2: Int)(f:(Int,Int) => A): M[A] = {
+    require(n1 == n2)
+    tabulate(n1)(f)
+  }
+}
+
+abstract class QuadTreeSquareMatrix[A] extends SquareMatrix[A] {
+  def exponent: Int
+  override def dimension = 1 << exponent
+}
+
+case class QT_Zero[A](data: A) extends QuadTreeSquareMatrix[A] {
+  val exponent: Int = 0
+  override def toString: String = "Zero " + data.toString
+  def apply(i: Int, j: Int): A =
+    if(i==0 && j==0) data
+    else error("out of bounds")
+  def updated(i: Int, j: Int, elem: A): QuadTreeSquareMatrix[A] = {
+    error("not implemented")
+  }
+}
+
+case class QT_Succ[A](
+  subm: QuadTreeSquareMatrix[Tuple4[A,A,A,A]]
+) extends QuadTreeSquareMatrix[A] {
+  val exponent = 1 + subm.exponent
+  override def toString: String= "Succ " + subm.toString
+  def apply(i: Int, j: Int): A = {
+    val q = subm(i % subm.dimension, j % subm.dimension)
+    (i / subm.dimension, j / subm.dimension) match {
+      case (0,0) => q._1
+      case (0,1) => q._2
+      case (1,0) => q._3
+      case (1,1) => q._4
+      case _ => error("out of bounds")
     }
+  }
+  def updated(i: Int, j: Int, elem: A): QuadTreeSquareMatrix[A] = {
+    error("not implemented")
+  }
+}
+
+object QuadTreeSquareMatrix extends SquareMatrixFactory[QuadTreeSquareMatrix] {
+  def fill[A](n: Int)(elem: => A): QuadTreeSquareMatrix[A] = {
+    if(n == 1) QT_Zero(elem)
+    else {
+      require(n > 0 && n % 2 == 0)
+      QT_Succ(fill(n/2, n/2)(elem,elem,elem,elem))
+    }
+  }
+  def tabulate[A](n:Int)(f:(Int,Int)=>A): QuadTreeSquareMatrix[A] = {
+    if(n == 1) QT_Zero(f(0,0))
+    else {
+      require(n > 0 && n % 2 == 0)
+      QT_Succ(tabulate(n/2, n/2) { (i,j) =>
+        (f(2*i, 2*j),
+         f(2*i, 2*j+1),
+         f(2*i+1, 2*j),
+         f(2*i+1, 2*j+1))})
+    }
+  }
 }
 
