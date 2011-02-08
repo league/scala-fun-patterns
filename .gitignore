@@ -1,3 +1,4 @@
 *.class
 project/boot/
 target/
+lib_managed/
