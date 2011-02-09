@@ -33,6 +33,11 @@ extends MatrixFactory[M] {
   }
 }
 
+object MatrixErrors {
+  def outOfBounds = error("out of bounds")
+  def notImplemented = error("not implemented")
+}
+
 trait Quad[A] {
   type Tup = (A,A,A,A)
   def exponent: Int
@@ -52,7 +57,7 @@ case class QT_Zero[A](data: A) extends QuadTreeSquareMatrix[A] {
   override def toString: String = "Zero " + data.toString
   def apply(i: Int, j: Int): A =
     if(i==0 && j==0) data
-    else error("out of bounds")
+    else MatrixErrors.outOfBounds
   def updated(i: Int, j: Int, f: A => A): QuadTreeSquareMatrix[A] =
     QT_Zero(f(data))
   def map[B](f: A => B): QuadTreeSquareMatrix[B] =
@@ -71,7 +76,7 @@ case class QT_Succ[A](
       case (0,1) => q._2
       case (1,0) => q._3
       case (1,1) => q._4
-      case _ => error("out of bounds")
+      case _ => MatrixErrors.outOfBounds
     }
   }
   def updated(i: Int, j: Int, f: A => A): QuadTreeSquareMatrix[A] =
@@ -81,7 +86,7 @@ case class QT_Succ[A](
         case ((a,b,c,d),0,1) => (a,f(b),c,d)
         case ((a,b,c,d),1,0) => (a,b,f(c),d)
         case ((a,b,c,d),1,1) => (a,b,c,f(d))
-        case _ => error("out of bounds")
+        case _ => MatrixErrors.outOfBounds
       }))
   def map[B](f: A => B): QuadTreeSquareMatrix[B] =
     QT_Succ(subm.map {
@@ -108,4 +113,51 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory[QuadTreeSquareMatrix] {
          f(2*i+1, 2*j+1))})
     }
   }
+}
+
+object FastExpSquareMatrix {
+  abstract class Vec[A] {
+    def size: Int
+    def sub(i: Int): A
+  }
+  case class Empty[A]() extends Vec[A] {
+    val size = 0
+    def sub(i:Int) = MatrixErrors.outOfBounds
+  }
+  case class Id[A](value: A) extends Vec[A] {
+    val size = 1
+    def sub(i:Int) = if(i == 0) value else MatrixErrors.outOfBounds
+  }
+  case class Pr[V[A]<:Vec[A], W[A]<:Vec[A], A](v: V[A], w: W[A])
+       extends Vec[A] {
+         val size = v.size + w.size
+         def sub(i:Int) =
+           if(i < v.size) v.sub(i)
+           else w.sub(i - v.size)
+       }
+  trait Pair[V[A]<:Vec[A], W[A]<:Vec[A]] {
+    type T[A] = Pr[V,W,A]              // for partial type application
+  }
+
+  abstract class Square_[V[A]<:Vec[A], W[A]<:Vec[A], A] {
+    def sub(i: Int, j: Int): A
+  }
+
+  case class Zero[V[A]<:Vec[A], W[A]<:Vec[A], A] (
+    data: V[V[A]]
+  ) extends Square_[V,W,A] {
+    def sub(i: Int, j: Int): A = data.sub(j).sub(i)
+  }
+  case class Even[V[A]<:Vec[A], W[A]<:Vec[A], A] (
+    next: Square_[V, Pair[V,W]#T, A]
+  ) extends Square_[V,W,A] {
+    def sub(i: Int, j: Int): A = next.sub(i,j)
+  }
+  case class Odd[V[A]<:Vec[A], W[A]<:Vec[A], A] (
+    next: Square_[Pair[V,W]#T, Pair[W,W]#T, A]
+  ) extends Square_[V,W,A] {
+    def sub(i: Int, j: Int): A = next.sub(i,j)
+  }
+
+  type Square[A] = Square_[Empty,Id,A]
 }
