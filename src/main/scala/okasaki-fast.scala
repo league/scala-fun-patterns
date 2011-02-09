@@ -5,6 +5,7 @@ trait Matrix[A] extends Function2[Int,Int,A] {
   def size: (Int,Int) = (width, height)
   def apply(coord: (Int,Int)): A = apply(coord._1, coord._2)
   def updated(i: Int, j: Int, elem: A): Matrix[A]
+  def map[B](f: A => B): Matrix[B]
 }
 
 trait MatrixFactory[M[A] <: Matrix[A]] {
@@ -32,9 +33,18 @@ extends MatrixFactory[M] {
   }
 }
 
-abstract class QuadTreeSquareMatrix[A] extends SquareMatrix[A] {
+trait Quad[A] {
+  type Tup = (A,A,A,A)
   def exponent: Int
-  override def dimension = 1 << exponent
+  def dimension = 1 << exponent
+}
+
+abstract class QuadTreeSquareMatrix[A]
+extends SquareMatrix[A] with Quad[A] {
+  def updated(i: Int, j: Int, f: A => A): QuadTreeSquareMatrix[A]
+  def updated(i: Int, j: Int, elem: A): QuadTreeSquareMatrix[A] =
+    updated(i, j, (_:A) => elem)
+  def map[B](f: A => B): QuadTreeSquareMatrix[B]
 }
 
 case class QT_Zero[A](data: A) extends QuadTreeSquareMatrix[A] {
@@ -43,13 +53,14 @@ case class QT_Zero[A](data: A) extends QuadTreeSquareMatrix[A] {
   def apply(i: Int, j: Int): A =
     if(i==0 && j==0) data
     else error("out of bounds")
-  def updated(i: Int, j: Int, elem: A): QuadTreeSquareMatrix[A] = {
-    error("not implemented")
-  }
+  def updated(i: Int, j: Int, f: A => A): QuadTreeSquareMatrix[A] =
+    QT_Zero(f(data))
+  def map[B](f: A => B): QuadTreeSquareMatrix[B] =
+    QT_Zero(f(data))
 }
 
 case class QT_Succ[A](
-  subm: QuadTreeSquareMatrix[Tuple4[A,A,A,A]]
+  subm: QuadTreeSquareMatrix[Quad[A]#Tup]
 ) extends QuadTreeSquareMatrix[A] {
   val exponent = 1 + subm.exponent
   override def toString: String= "Succ " + subm.toString
@@ -63,9 +74,19 @@ case class QT_Succ[A](
       case _ => error("out of bounds")
     }
   }
-  def updated(i: Int, j: Int, elem: A): QuadTreeSquareMatrix[A] = {
-    error("not implemented")
-  }
+  def updated(i: Int, j: Int, f: A => A): QuadTreeSquareMatrix[A] =
+    QT_Succ(subm.updated(i/2, j/2, (q:Tup) =>
+      (q, i%2, j%2) match {
+        case ((a,b,c,d),0,0) => (f(a),b,c,d)
+        case ((a,b,c,d),0,1) => (a,f(b),c,d)
+        case ((a,b,c,d),1,0) => (a,b,f(c),d)
+        case ((a,b,c,d),1,1) => (a,b,c,f(d))
+        case _ => error("out of bounds")
+      }))
+  def map[B](f: A => B): QuadTreeSquareMatrix[B] =
+    QT_Succ(subm.map {
+      q:Tup => (f(q._1), f(q._2), f(q._3), f(q._4))
+    })
 }
 
 object QuadTreeSquareMatrix extends SquareMatrixFactory[QuadTreeSquareMatrix] {
@@ -88,4 +109,3 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory[QuadTreeSquareMatrix] {
     }
   }
 }
-

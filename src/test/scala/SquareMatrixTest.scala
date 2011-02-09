@@ -31,4 +31,22 @@ object QuadTreeCreateSpec extends Properties("quad tree create") {
     }
   }
 
+  property("update") = Prop.forAll(fillMatrix) {
+    m => Prop.forAll(coord(m)) {
+      ij =>
+        val m2 = m.updated(ij._1, ij._2, '!')
+        m2(ij) == '!' && Prop.forAll(coord(m)) {
+          kl => ij != kl ==> (m2(kl) == m(kl))
+        }
+    }
+  }
+
+  property("map") = Prop.forAll(pairMatrix) {
+    m =>
+      def f(xy: (Int,Int)) = xy._1 - xy._1
+      val m2 = m.map(f)
+      Prop.forAll(coord(m2)) {
+        ij => f(m(ij)) == m2(ij)
+      }
+  }
 }
