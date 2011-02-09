@@ -120,15 +120,15 @@ object FastExpSquareMatrix {
     def size: Int
     def sub(i: Int): A
   }
-  case class Empty[A]() extends Vec[A] {
+  sealed case class Empty[A]() extends Vec[A] {
     val size = 0
     def sub(i:Int) = MatrixErrors.outOfBounds
   }
-  case class Id[A](value: A) extends Vec[A] {
+  sealed case class Id[A](value: A) extends Vec[A] {
     val size = 1
     def sub(i:Int) = if(i == 0) value else MatrixErrors.outOfBounds
   }
-  case class Pr[V[A]<:Vec[A], W[A]<:Vec[A], A](v: V[A], w: W[A])
+  sealed case class Pr[V[A]<:Vec[A], W[A]<:Vec[A], A](v: V[A], w: W[A])
        extends Vec[A] {
          val size = v.size + w.size
          def sub(i:Int) =
@@ -149,7 +149,7 @@ object FastExpSquareMatrix {
     def sub(i: Int, j: Int): A = data.sub(j).sub(i)
   }
   case class Even[V[A]<:Vec[A], W[A]<:Vec[A], A] (
-    next: Square_[V, Pair[V,W]#T, A]
+    next: Square_[V, Pair[W,W]#T, A]
   ) extends Square_[V,W,A] {
     def sub(i: Int, j: Int): A = next.sub(i,j)
   }
@@ -160,4 +160,37 @@ object FastExpSquareMatrix {
   }
 
   type Square[A] = Square_[Empty,Id,A]
+
+
+  trait Maker[V[_]] {                   // to maintain rank-2 poly
+    def apply[A](x: A): V[A]
+  }
+
+  val mkE = new Maker[Empty] {
+    def apply[A](x: A) = Empty()
+  }
+
+  val mkI = new Maker[Id] {
+    def apply[A](x: A) = Id(x)
+  }
+
+  case class mkP[V[X] <: Vec[X], W[X] <: Vec[X]](mkv: Maker[V], mkw: Maker[W])
+       extends Maker[Pair[V,W]#T] {
+         def apply[A](x: A) = Pr(mkv(x), mkw(x))
+       }
+
+  def create_[V[X] <: Vec[X], W[X] <: Vec[X], A]
+    (mkv: Maker[V], mkw: Maker[W], x:A, n:Int): Square_[V,W,A] =
+      if(n == 0) Zero(mkv(mkv(x)))
+      else if(n%2 == 0) Even(create_[V,Pair[W,W]#T,A](mkv, mkP(mkw,mkw), x, n/2))
+      else Odd(create_[Pair[V,W]#T, Pair[W,W]#T, A](mkP(mkv,mkw), mkP(mkw,mkw), x, n/2))
+
+  def create[A](x: A, n: Int) = create_[Empty,Id,A](mkE,mkI,x,n)
+
+//  def mkE[A](x: A): Empty[A] = Empty()
+//  def mkI[A](x: A): Id[A] = Id(x)
+//  def mkP[V[A]<:Vec[A], W[A]<:Vec[A], A]
+//    (mkv: A=>V[A], mkw: A=>W[A], x: A): Pr[V,W,A] =
+//      Pr(mkv(x), mkw(x))
+
 }
