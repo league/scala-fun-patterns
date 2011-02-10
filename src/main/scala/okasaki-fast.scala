@@ -6,8 +6,8 @@ trait Matrix[A] extends Function2[Int,Int,A] {
   def height: Int
   def size: (Int,Int) = (width, height)
   def apply(coord: (Int,Int)): A = apply(coord._1, coord._2)
-  def updated(i: Int, j: Int, elem: A): M[A]
-  def map[B](f: A => B): M[B]
+  def updated[B>:A](i: Int, j: Int, elem: B): M[B]
+  def map[B](f: (Int,Int,A) => B): M[B]
 }
 
 /** Constructors for general 2D matrices. */
@@ -55,8 +55,8 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory {
     type M[X] = QT_Matrix[X]
     def exponent: Int
     def dimension = 1 << exponent
-    def updated(i: Int, j: Int, f: A => A): M[A]
-    def updated(i: Int, j: Int, elem: A): M[A] =
+    def updated[B>:A](i: Int, j: Int, f: A => B): M[B]
+    def updated[B>:A](i: Int, j: Int, elem: B): M[B] =
       updated(i, j, (_:A) => elem)
   }
 
@@ -66,8 +66,8 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory {
     def apply(i: Int, j: Int): A =
       if(i==0 && j==0) data
       else MatrixErrors.outOfBounds
-    def updated(i: Int, j: Int, f: A => A): M[A] = Zero(f(data))
-    def map[B](f: A => B): M[B] = Zero(f(data))
+    def updated[B>:A](i: Int, j: Int, f: A => B): M[B] = Zero(f(data))
+    def map[B](f: (Int,Int,A) => B): M[B] = Zero(f(0,0,data))
   }
 
   type Quad[A] = (A,A,A,A)
@@ -82,7 +82,7 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory {
       case ((_,_,_,q),1,1) => q
       case _ => MatrixErrors.outOfBounds
     }
-    def updated(i: Int, j: Int, f: A => A): M[A] =
+    def updated[B>:A](i: Int, j: Int, f: A => B): M[B] =
       Succ(next.updated(i/2, j/2, q => (q, i%2, j%2) match {
         case ((a,b,c,d),0,0) => (f(a),  b ,  c ,  d )
         case ((a,b,c,d),0,1) => (  a ,f(b),  c ,  d )
@@ -90,9 +90,12 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory {
         case ((a,b,c,d),1,1) => (  a ,  b ,  c ,f(d))
         case _ => MatrixErrors.outOfBounds
       }))
-    def map[B](f: A => B): M[B] =
+    def map[B](f: (Int,Int,A) => B): M[B] =
       Succ(next.map {
-        case (a,b,c,d) => (f(a), f(b), f(c), f(d))
+        case (i,j,(a,b,c,d)) => (f(2*i, 2*j, a),
+                                 f(2*i, 2*j+1, b),
+                                 f(2*i+1, 2*j, c),
+                                 f(2*i+1, 2*j+1, d))
       })
   }
 
@@ -191,14 +194,14 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     val dimension = 0
     def apply(i: Int, j: Int): A =
       ops.sub(ops.sub(data, i), j)
-    def updated(i: Int, j: Int, elem: A) = {
+    def updated[B>:A](i: Int, j: Int, elem: B) = {
       val before = ops.sub(data, i)
       val after = ops.update(before, j, elem)
       Zero(ops.update(data, i, after), ops)
     }
-    def map[B](f: A => B): M[B] =
+    def map[B](f: (Int,Int,A) => B): M[B] =
       Zero(ops.map(data, (i, row:V[A]) =>
-        ops.map(row, (j, elt:A) => f(elt))), ops)
+        ops.map(row, (j, elt:A) => f(i,j,elt))), ops)
     override def toString: String = "Zero " + data.toString
   }
 
@@ -207,9 +210,9 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2 + 1
     def apply(i: Int, j: Int): A = next(i,j)
-    def updated(i: Int, j: Int, elem: A) =
+    def updated[B>:A](i: Int, j: Int, elem: B) =
       Odd(next.updated(i,j,elem))
-    def map[B](f: A => B): M[B] =
+    def map[B](f: (Int,Int,A) => B): M[B] =
       Odd(next.map(f))
     override def toString: String = "Odd " + next.toString
   }
@@ -219,9 +222,9 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2
     def apply(i: Int, j: Int): A = next(i,j)
-    def updated(i: Int, j: Int, elem: A) =
+    def updated[B>:A](i: Int, j: Int, elem: B) =
       Even(next.updated(i,j,elem))
-    def map[B](f: A => B): M[B] =
+    def map[B](f: (Int,Int,A) => B): M[B] =
       Even(next.map(f))
     override def toString: String = "Even " + next.toString
   }

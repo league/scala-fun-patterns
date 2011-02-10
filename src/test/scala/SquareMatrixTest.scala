@@ -46,10 +46,11 @@ extends Properties(nm) {
 
   property("map") = Prop.forAll(pairs(dimension)) {
     m =>
-      def f(xy: (Int,Int)) = xy._1 - xy._1
+      def f(i:Int, j: Int, xy: (Int,Int)) =
+        i == xy._1 && j == xy._2
       val m2 = m.map(f)
       Prop.forAll(coord(m2)) {
-        ij => f(m(ij)) == m2(ij)
+        ij => m2(ij)
       }
   }
 
