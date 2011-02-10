@@ -63,6 +63,39 @@ object QuadTreeTestParams extends SquareMatrixTestParams {
 object QuadTreeSpec
 extends SquareMatrixSpec(QuadTreeTestParams, "QuadTreeSpec")
 
+case class SizedVectorSpec[V[+_]](ops: SizedVectors.Ops[V], nm: String)
+extends Properties(nm) {
+  def frob(x: Int) = (x+1) * (x+2)
+  private val sample1 = ops(frob)
+
+  def borf(i: Int, x: Int) = i + x*x
+  private val sample2 = ops.map(sample1, borf)
+
+  val coord = Gen.choose(0, ops.size-1)
+
+  property("elements") = Prop.forAll(coord) {
+    i => ops.sub(sample1, i) == frob(i)
+  }
+  property("map") = Prop.forAll(coord) {
+    i => ops.sub(sample2, i) == borf(i, frob(i))
+  }
+  property("update") = Prop.forAll(coord) {
+    i => val sample3 = ops.update(sample2, i, 9999)
+      ops.sub(sample3, i) == 9999 &&
+      Prop.forAll(coord) {
+        j => j != i ==> (ops.sub(sample3,j) == ops.sub(sample2,j))
+      }
+  }
+}
+
+object SizedVectorSpec extends Properties("sized vectors") {
+  property("all") =
+    SizedVectorSpec[SizedVectors.ops1.T](SizedVectors.ops1, "One") &&
+    SizedVectorSpec[SizedVectors.ops2.T](SizedVectors.ops2, "Two") &&
+    SizedVectorSpec[SizedVectors.ops3.T](SizedVectors.ops3, "Three") &&
+    SizedVectorSpec[SizedVectors.ops4.T](SizedVectors.ops4, "Four") &&
+    SizedVectorSpec[SizedVectors.ops5.T](SizedVectors.ops5, "Five")
+}
 
 /*
 object FastExpTestParams extends SquareMatrixTestParams {
@@ -71,28 +104,4 @@ object FastExpTestParams extends SquareMatrixTestParams {
 }
 object FastExpSpec
 extends SquareMatrixSpec(FastExpTestParams, "FastExpSpec")
-abstract class SizedVectorSpec(sv: SizedVectors.VectorSpec,
-                               nm: String) extends Properties(nm) {
-  def frob(x: Int) = x * (x+1)
-  private val sample = sv(frob)
-
-  def borf(i: Int, x: Int) = i + x*x
-  val coord = Gen.choose(0,sv.size-1)
-
-  property("elements") = Prop.forAll(coord) {
-    i => sv.sub(sample,i) == frob(i)
-  }
-}
-
-object VectorOneSpec
-extends SizedVectorSpec(SizedVectors.One, "one")
-
-object VectorTwoSpec
-extends SizedVectorSpec(SizedVectors.Two, "two")
-
-object VectorThreeSpec
-extends SizedVectorSpec(SizedVectors.Three, "three")
-
-object VectorFourSpec
-extends SizedVectorSpec(SizedVectors.Four, "four")
 */
