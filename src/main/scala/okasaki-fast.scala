@@ -143,134 +143,130 @@ object SizedVectors {
        }
 
   /* Sized vector subscript functions. */
-  def subE[A](i: Int, e: Empty[A]): A = MatrixErrors.outOfBounds
-
-  def subI[A](i: Int, x: Id[A]): A =
-    if(i == 0) x
-    else MatrixErrors.outOfBounds
-
-  def subP[V[_], W[_], A]
-    (subv: (Int,V[A])=>A, subw: (Int,W[A])=>A, vsize: Int)
-    (i: Int, p: Two[V,W,A]) =
-       if(i < vsize) subv(i, p._1)
-       else subw(i-vsize, p._2)
-
-  /* Some examples: singletons represented as
-   * fastexp E I 1 = fastexp Tw[E,I] Tw[I,I] 0 = Tw[E,I]
-   */
-  type T1[A] = Two[Empty,Id,A]
-  def mk1[A](f: Int => A): T1[A] = mkP(mkE,mkI,0)(f)
-  def sub1[A](i: Int, v: T1[A]): A = subP(subE, subI[A], 0)(i, v)
-  assert(sub1(0,mk1{x => 'Q'}) == 'Q')
-
-  /* Pairs represented as
-   * fastexp E I 2 = fastexp E Tw[I,I] 1 = fastexp Tw[E,Tw[I,I]] _ 0 = Tw[E,Tw[I,I]]
-   */
-  type T2[A] = Two[Empty,Tw[Id,Id]#T,A]
-  def mk2[A](f: Int => A): T2[A] = mkP[Empty,Tw[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
-  def sub2[A](i: Int, v: T2[A]): A =
-    subP[Empty,Tw[Id,Id]#T,A](subE, subP[Id,Id,A](subI, subI, 1), 0)(i,v)
-//  assert(sub2(0,mk2{x => x
-}
-
-/*
-object FastExpSquareMatrix {
-
-  type Empty[A] = Unit
-  type Id[A] = A
-  type Two[V[_], W[_], A] = Pair[V[A], W[A]]
-
-  trait Tw[V[_], W[_]] {                // partial application of Two
-    type T[A] = Two[V,W,A]
+  trait Getter[V[_]] {
+    def apply[A](i:Int, v: V[A]): A
   }
 
-
-
-  type Square[A] = Square_[Empty,Id,A]
-
-  sealed abstract class Square_[V[_], W[_], A] extends SquareMatrix[A]
-
-  case class FE_Zero[V[_], W[_], A] private (data: V[V[A]])
-       extends Square_[V,W,A]
-  {
-    def dimension: Int = MatrixErrors.notImplemented
-    def apply(i: Int, j: Int): A = MatrixErrors.notImplemented
-    def map[B](f: A => B): Square[B] = MatrixErrors.notImplemented
-    def updated(i: Int, j: Int, elem: A): Square[A] = MatrixErrors.notImplemented
+  val subE = new Getter[Empty] {
+    def apply[A](i: Int, v: Empty[A]): A = MatrixErrors.outOfBounds
   }
 
-  case class FE_Even[V[_], W[_], A] private (next: Square_[V, Tw[W,W]#T, A])
-       extends Square_[V,W,A]
-  {
-    def dimension: Int = MatrixErrors.notImplemented
-    def apply(i: Int, j: Int): A = MatrixErrors.notImplemented
-    def map[B](f: A => B): Square[B] = MatrixErrors.notImplemented
-    def updated(i: Int, j: Int, elem: A): Square[A] = MatrixErrors.notImplemented
+  val subI = new Getter[Id] {
+    def apply[A](i: Int, v: Id[A]): A =
+      if(i == 0) v
+      else MatrixErrors.outOfBounds
   }
 
-  case class FE_Odd[V[_], W[_], A] private (next: Square_[Tw[V,W]#T, Tw[W,W]#T, A])
-       extends Square_[V,W,A]
-  {
-    def dimension: Int = MatrixErrors.notImplemented
-    def apply(i: Int, j: Int): A = MatrixErrors.notImplemented
-    def map[B](f: A => B): Square[B] = MatrixErrors.notImplemented
-    def updated(i: Int, j: Int, elem: A): Square[A] = MatrixErrors.notImplemented
-  }
-
-/*
-  abstract class Square_[V[A]<:Vec[A], W[A]<:Vec[A], A] {
-    def sub(i: Int, j: Int): A
-  }
-
-  case class Zero[V[A]<:Vec[A], W[A]<:Vec[A], A] (
-    data: V[V[A]]
-  ) extends Square_[V,W,A] {
-    def sub(i: Int, j: Int): A = data.sub(j).sub(i)
-  }
-  case class Even[V[A]<:Vec[A], W[A]<:Vec[A], A] (
-    next: Square_[V, Pair[W,W]#T, A]
-  ) extends Square_[V,W,A] {
-    def sub(i: Int, j: Int): A = next.sub(i,j)
-  }
-  case class Odd[V[A]<:Vec[A], W[A]<:Vec[A], A] (
-    next: Square_[Pair[V,W]#T, Pair[W,W]#T, A]
-  ) extends Square_[V,W,A] {
-    def sub(i: Int, j: Int): A = next.sub(i,j)
-  }
-
-  type Square[A] = Square_[Empty,Id,A]
-
-
-  trait Maker[V[_]] {                   // to maintain rank-2 poly
-    def apply[A](x: A): V[A]
-  }
-
-  val mkE = new Maker[Empty] {
-    def apply[A](x: A) = Empty()
-  }
-
-  val mkI = new Maker[Id] {
-    def apply[A](x: A) = Id(x)
-  }
-
-  case class mkP[V[X] <: Vec[X], W[X] <: Vec[X]](mkv: Maker[V], mkw: Maker[W])
-       extends Maker[Pair[V,W]#T] {
-         def apply[A](x: A) = Pr(mkv(x), mkw(x))
+  case class subP[V[_],W[_]](subv: Getter[V], subw: Getter[W], vsize: Int)
+       extends Getter[Tw[V,W]#T] {
+         def apply[A](i: Int, v: Two[V,W,A]): A =
+           if(i < vsize) subv(i, v._1)
+           else subw(i-vsize, v._2)
        }
 
-  def create_[V[X] <: Vec[X], W[X] <: Vec[X], A]
-    (mkv: Maker[V], mkw: Maker[W], x:A, n:Int): Square_[V,W,A] =
-      if(n == 0) Zero(mkv(mkv(x)))
-      else if(n%2 == 0) Even(create_[V,Pair[W,W]#T,A](mkv, mkP(mkw,mkw), x, n/2))
-      else Odd(create_[Pair[V,W]#T, Pair[W,W]#T, A](mkP(mkv,mkw), mkP(mkw,mkw), x, n/2))
+  /* For convenience and testing, here are some specializations for
+     small lengths. */
+  trait VectorSpec {
+    type T[_]
+    def size: Int
+    def apply[A](f: Int => A): T[A]
+    def sub[A](v: T[A], i: Int): A
+  }
 
-  def create[A](x: A, n: Int) = create_[Empty,Id,A](mkE,mkI,x,n)
-
-//  def mkE[A](x: A): Empty[A] = Empty()
-//  def mkI[A](x: A): Id[A] = Id(x)
-//  def mkP[V[A]<:Vec[A], W[A]<:Vec[A], A]
-//    (mkv: A=>V[A], mkw: A=>W[A], x: A): Pr[V,W,A] =
-//      Pr(mkv(x), mkw(x))
-*/
+  object One extends VectorSpec {
+    /* fastexp E I 1 = fastexp Tw[E,I] Tw[I,I] 0 = Tw[E,I] */
+    type T[A] = Two[Empty,Id,A]
+    def apply[A](f: Int => A): T[A] = mkP(mkE,mkI,0)(f)
+    def sub[A](v: T[A], i: Int): A = subP(subE, subI, 0)(i, v)
+    def size = 1
+  }
+  object Two extends VectorSpec {
+    /* fastexp E I 2 =
+     * fastexp E Tw[I,I] 1 =
+     * fastexp Tw[E,Tw[I,I]] _ 0 =
+     * Tw[E,Tw[I,I]]
+     */
+    type T[A] = Two[Empty,Tw[Id,Id]#T,A]
+    def apply[A](f: Int => A): T[A] =
+      mkP[Empty,Tw[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
+    def sub[A](v: T[A], i: Int): A =
+      subP[Empty,Tw[Id,Id]#T](subE, subP(subI, subI, 1), 0)(i,v)
+    def size = 2
+  }
 }
-*/
+
+object FastExpSquareMatrix extends SquareMatrixFactory {
+  import SizedVectors._
+
+  case class FE_Matrix[A](m: FE_M[Empty,Id,A])
+  extends SquareMatrix[A] {
+    type M[A] = FE_Matrix[A]
+    def dimension = m.dimension
+    def apply(i: Int, j: Int): A = m.sub(subE,subI,0,1,i,j)
+    def map[B](f: A => B) = MatrixErrors.notImplemented
+    def updated(i:Int, j: Int, elem: A): M[A] =
+      MatrixErrors.notImplemented
+    override def toString = m.toString
+  }
+
+  type M[A] = FE_Matrix[A]
+
+  sealed abstract class FE_M[V[_],W[_],A] {
+    def dimension: Int
+    def sub(subv: Getter[V], subw: Getter[W],
+            vsize: Int, wsize: Int, i: Int, j: Int): A
+  }
+
+  /*private*/ case class Zero[V[_],W[_],A](data: V[V[A]])
+  extends FE_M[V,W,A] {
+    val dimension = 0
+    def sub(subv: Getter[V], subw: Getter[W],
+            vsize: Int, wsize: Int, i: Int, j: Int): A =
+      subv(j, subv(i, data))
+    override def toString: String = "Zero " + data.toString
+  }
+
+  /*private*/ case class Odd[V[_],W[_],A]
+      (next: FE_M[Tw[V,W]#T, Tw[W,W]#T, A])
+  extends FE_M[V,W,A] {
+    val dimension = next.dimension*2 + 1
+    def sub(subv: Getter[V], subw: Getter[W],
+            vsize: Int, wsize: Int, i: Int, j: Int): A =
+      next.sub(subP(subv,subw,vsize),
+               subP(subw,subw,wsize),
+               vsize+wsize, wsize+wsize, i, j)
+    override def toString: String = "Odd " + next.toString
+  }
+
+  /*private*/ case class Even[V[_],W[_],A]
+      (next: FE_M[V, Tw[W,W]#T, A])
+  extends FE_M[V,W,A] {
+    val dimension = next.dimension*2
+    def sub(subv: Getter[V], subw: Getter[W],
+            vsize: Int, wsize: Int, i: Int, j: Int): A =
+      next.sub(subv, subP(subw,subw,wsize),
+               vsize, wsize*2, i, j)
+    override def toString: String = "Even " + next.toString
+  }
+
+  def oneByOne[A](f:(Int,Int) => A) =
+    FE_Matrix(
+      Odd[Empty,Id,A](Zero[Tw[Empty,Id]#T, Tw[Id,Id]#T, A](
+        One(i => One.apply[A](j => f(i,j))))))
+
+  def tabulate[A](n: Int)(f:(Int,Int) => A): M[A] = {
+    def loop[V[_],W[_]](mkv: Maker[V], mkw: Maker[W],
+                        vsize: Int, wsize: Int, k: Int): FE_M[V,W,A] =
+      if(k == 0)
+        Zero(mkv(i => mkv(j => f(i,j))))
+      else if(k%2 == 1)
+        Odd(loop[Tw[V,W]#T, Tw[W,W]#T](
+          mkP(mkv,mkw,vsize), mkP(mkw,mkw,wsize),
+          vsize+wsize, wsize*2, k/2))
+      else
+        Even(loop[V, Tw[W,W]#T](
+          mkv, mkP(mkw,mkw,wsize),
+          vsize, wsize*2, k/2))
+    FE_Matrix(loop(mkE, mkI, 0, 1, n))
+  }
+}

@@ -60,7 +60,16 @@ object QuadTreeTestParams extends SquareMatrixTestParams {
   val dimension = Gen.choose(0,6).map(1 << _) // powers of two
 }
 
-object QuadTreeSpec extends SquareMatrixSpec(QuadTreeTestParams, "QuadTreeSpec")
+object QuadTreeSpec
+extends SquareMatrixSpec(QuadTreeTestParams, "QuadTreeSpec")
+
+object FastExpTestParams extends SquareMatrixTestParams {
+  val factory = FastExpSquareMatrix
+  val dimension = Gen.choose(0,40)
+}
+
+object FastExpSpec
+extends SquareMatrixSpec(FastExpTestParams, "FastExpSpec")
 
 abstract class SizedVectorSpec(nm: String) extends Properties(nm) {
   type T[_]
@@ -81,7 +90,7 @@ object SingletonVectorSpec extends SizedVectorSpec("singleton") {
   /* fastexp E I 1 = fastexp Tw[E,I] Tw[I,I] 0 = Tw[E,I] */
   type T[A] = Two[Empty,Id,A]
   def mk[A](f: Int => A): T[A] = mkP(mkE,mkI,0)(f)
-  def sub[A](i: Int, v: T[A]): A = subP(subE, subI[A], 0)(i, v)
+  def sub[A](i: Int, v: T[A]): A = subP(subE, subI, 0)(i, v)
   def size = 1
 }
 
@@ -95,7 +104,7 @@ object PairVectorSpec extends SizedVectorSpec("pair") {
   type T[A] = Two[Empty,Tw[Id,Id]#T,A]
   def mk[A](f: Int => A): T[A] = mkP[Empty,Tw[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
   def sub[A](i: Int, v: T[A]): A =
-    subP[Empty,Tw[Id,Id]#T,A](subE, subP(subI[A], subI[A], 1), 0)(i,v)
+    subP[Empty,Tw[Id,Id]#T](subE, subP(subI, subI, 1), 0)(i,v)
   def size = 2
 }
 
@@ -113,9 +122,9 @@ object TripleVectorSpec extends SizedVectorSpec("triple") {
       mkP(mkI,mkI,1),
       1)(f)
   def sub[A](i: Int, v: T[A]): A =
-    subP[Tw[Empty,Id]#T, Tw[Id,Id]#T, A](
-      subP(subE,subI[A],0),
-      subP(subI[A],subI[A],1),
+    subP[Tw[Empty,Id]#T, Tw[Id,Id]#T](
+      subP(subE,subI,0),
+      subP(subI,subI,1),
       1)(i,v)
   def size = 3
 }
@@ -138,11 +147,11 @@ object QuadVectorSpec extends SizedVectorSpec("quad") {
         2),
       0)(f)
   def sub[A](i: Int, v: T[A]): A =
-    subP[Empty, Tw[Tw[Id,Id]#T, Tw[Id,Id]#T]#T, A](
+    subP[Empty, Tw[Tw[Id,Id]#T, Tw[Id,Id]#T]#T](
       subE,
-      subP[Tw[Id,Id]#T, Tw[Id,Id]#T, A](
-        subP(subI[A], subI[A], 1),
-        subP(subI[A], subI[A], 1),
+      subP[Tw[Id,Id]#T, Tw[Id,Id]#T](
+        subP(subI, subI, 1),
+        subP(subI, subI, 1),
         2),
       0)(i,v)
   def size = 4
