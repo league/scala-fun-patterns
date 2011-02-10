@@ -113,88 +113,183 @@ object SizedVectors {
   /* Could implement these with case classes, but want to keep them
      very lightweight: just nested pairs with no superfluous
      wrappers. */
-  type Empty[A] = Unit
-  type Id[A] = A
-  type Two[V[_], W[_], A] = Pair[V[A], W[A]]
+  type Empty[+A] = Unit
+  type Id[+A] = A
+  type Pair[V[+_], W[+_], +A] = (V[A], W[A])
 
-  /** Partial application of `Two` type constructor. */
-  trait Tw[V[_], W[_]] {
-    type T[A] = Two[V,W,A]
+  /** Partial application of `Pair` type constructor: Pr[V,W]#T */
+  trait Pr[V[+_], W[+_]] {
+    type T[+A] = Pair[V,W,A]
   }
 
-  /** Constructors for sized vectors.  Written in this form (rather
-      than just functions) to maintain [rank-2] polymorphism when
-      passing them as arguments. */
-  trait Maker[V[_]] {
-    def apply[A](f: Int => A): V[A]
+  trait Ops[TT[+_]] {
+    type T[+A] = TT[A]
+    def size: Int
+    def apply[A](f: Int => A): T[A]     // constructor
+    def sub[A](v: T[A], i: Int): A
+    def map[A,B](v: T[A], f: (Int,A) => B): T[B]
+    def update[A,B>:A](v: T[A], i: Int, x: B): T[B]
   }
 
-  val mkE = new Maker[Empty] {
-    def apply[A](f: Int => A): Empty[A] = ()
+  val opsE = new Ops[Empty] {
+    val size = 0
+    def apply[A](f: Int => A) = ()
+    def sub[A](v: T[A], i:Int) = MatrixErrors.outOfBounds
+    def map[A,B](v: T[A], f: (Int,A) => B) = ()
+    def update[A,B>:A](v: T[A], i: Int, x: B) = ()
   }
 
-  val mkI = new Maker[Id] {
-    def apply[A](f: Int => A): Id[A] = f(0)
+  val opsI = new Ops[Id] {
+    val size = 1
+    def apply[A](f: Int => A) = f(0)
+    def sub[A](v: T[A], i:Int) =
+      if(i == 0) v else MatrixErrors.outOfBounds
+    def map[A,B](v: T[A], f: (Int,A) => B) = f(0,v)
+    def update[A,B>:A](v: T[A], i: Int, x: B) = sub(x,i)
   }
 
-  case class mkP[V[_], W[_]](mkv: Maker[V], mkw: Maker[W], vsize: Int)
-       extends Maker[Tw[V,W]#T] {
-         def apply[A](f: Int => A): Two[V,W,A] = (mkv(f), mkw(i => f(i + vsize)))
-       }
+  case class opsP[V[+_],W[+_]](opsV: Ops[V], opsW: Ops[W])
+  extends Ops[Pr[V,W]#T] {
+    val size = opsV.size + opsW.size
+    def apply[A](f: Int => A) =
+      (opsV(f), opsW(i => f(i + opsV.size)))
+    def sub[A](v: T[A], i:Int) =
+      if(i < opsV.size) opsV.sub(v._1, i)
+      else opsW.sub(v._2, i - opsV.size)
+    def map[A,B](v: T[A], f: (Int,A) => B) =
+      (opsV.map(v._1, f),
+       opsW.map(v._2, (i,a:A) => f(i + opsV.size, a)))
+    def update[A,B>:A](v: T[A], i: Int, x: B) =
+      if(i < opsV.size)
+        (opsV.update(v._1, i, x), v._2)
+      else
+        (v._1, opsW.update(v._2, i - opsV.size, x))
+  }
 
+  val ops1  = opsP(opsE,opsI)
+  val ops2a = opsP(opsI,opsI)
+  val ops2  = opsP[Empty,ops2a.T](opsE,ops2a)
+  val ops3  = opsP[ops1.T,ops2a.T](ops1,ops2a)
+  val ops4a = opsP[ops2a.T,ops2a.T](ops2a,ops2a)
+  val ops4  = opsP[Empty,ops4a.T](opsE,ops4a)
+  val ops5  = opsP[ops1.T,ops4a.T](ops1,ops4a)
+  val ops6  = opsP[ops2.T,ops4a.T](ops2,ops4a)
+  val ops7  = opsP[ops3.T,ops4a.T](ops3,ops4a)
+  val ops8  = opsP[ops4.T,ops4a.T](ops4,ops4a)
+
+
+/*
+ *fastexp E I 7 =
+ * fastexp EI II 3 =
+ * fastexp (EI)(II) (II)(II) 1 =
+ * fastexp ((EI)(II))((II)(II)) _ 0
+ *
+  *
+  * 
+  * fastexp E I 6 =
+  * fastexp E II 3 =
+  * fastexp (E)(II) (II)(II) 1 =
+  * fastexp ((E)(II))((II)(II))  __ 0
   /* Sized vector subscript functions. */
-  trait Getter[V[_]] {
-    def apply[A](i:Int, v: V[A]): A
-  }
-
-  val subE = new Getter[Empty] {
-    def apply[A](i: Int, v: Empty[A]): A = MatrixErrors.outOfBounds
-  }
-
-  val subI = new Getter[Id] {
-    def apply[A](i: Int, v: Id[A]): A =
-      if(i == 0) v
-      else MatrixErrors.outOfBounds
-  }
-
   case class subP[V[_],W[_]](subv: Getter[V], subw: Getter[W], vsize: Int)
-       extends Getter[Tw[V,W]#T] {
-         def apply[A](i: Int, v: Two[V,W,A]): A =
-           if(i < vsize) subv(i, v._1)
-           else subw(i-vsize, v._2)
-       }
+  extends Getter[Pr[V,W]#T] {
+    def apply[A](v: Pair[V,W,A], i: Int): A =
+      if(i < vsize) subv(v._1, i)
+      else subw(v._2, i-vsize)
+    def map[A,B](v: Pair[V,W,A], f: (Int,A) => B) =
+      (subv.map(v._1, f), subw.map(v._2, {(i,a:A) => f(i+vsize, a)}))
+  }
 
   /* For convenience and testing, here are some specializations for
      small lengths. */
   trait VectorSpec {
+//    type V[_]
+//    type W[_]
+//    type T[A] = Pair[V,W,A]
     type T[_]
     def size: Int
     def apply[A](f: Int => A): T[A]
     def sub[A](v: T[A], i: Int): A
+//    def map[A,B](v: T[A], f: A => B): T[B]
   }
 
   object One extends VectorSpec {
-    /* fastexp E I 1 = fastexp Tw[E,I] Tw[I,I] 0 = Tw[E,I] */
-    type T[A] = Two[Empty,Id,A]
+    /* fastexp E I 1 =                 ODD
+     * fastexp Pr[E,I] Pr[I,I] 0 =     ZERO
+     * Pr[E,I]
+     * */
+    type T[A] = Pair[Empty,Id,A]
     def apply[A](f: Int => A): T[A] = mkP(mkE,mkI,0)(f)
-    def sub[A](v: T[A], i: Int): A = subP(subE, subI, 0)(i, v)
+    def sub[A](v: T[A], i: Int): A = subP(subE, subI, 0)(v,i)
     def size = 1
   }
   object Two extends VectorSpec {
-    /* fastexp E I 2 =
-     * fastexp E Tw[I,I] 1 =
-     * fastexp Tw[E,Tw[I,I]] _ 0 =
-     * Tw[E,Tw[I,I]]
+    /* fastexp E I 2 =                EVEN
+     * fastexp E Pr[I,I] 1 =          ODD
+     * fastexp Pr[E,Pr[I,I]] _ 0 =    ZERO
+     * Pr[E,Pr[I,I]]
      */
-    type T[A] = Two[Empty,Tw[Id,Id]#T,A]
+    type T[A] = Pair[Empty,Pr[Id,Id]#T,A]
     def apply[A](f: Int => A): T[A] =
-      mkP[Empty,Tw[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
+      mkP[Empty,Pr[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
     def sub[A](v: T[A], i: Int): A =
-      subP[Empty,Tw[Id,Id]#T](subE, subP(subI, subI, 1), 0)(i,v)
+      subP[Empty,Pr[Id,Id]#T](subE, subP(subI, subI, 1), 0)(v,i)
     def size = 2
   }
+  object Three extends VectorSpec {
+    /* fastexp E I 3 =                      ODD
+     * fastexp Pr[E,I] Pr[I,I] 1 =          ODD
+     * fastexp Pr[Pr[E,I],Pr[I,I]] _ 0 =    ZERO
+     * Pr[Pr[E,I],Pr[I,I]]
+     */
+    type T[A] = Pair[Pr[Empty,Id]#T, Pr[Id,Id]#T, A]
+    def apply[A](f: Int => A): T[A] =
+      mkP[Pr[Empty,Id]#T, Pr[Id,Id]#T](
+        mkP(mkE,mkI,0),
+        mkP(mkI,mkI,1),
+        1)(f)
+    def sub[A](v: T[A], i: Int): A =
+      subP[Pr[Empty,Id]#T, Pr[Id,Id]#T](
+        subP(subE,subI,0),
+        subP(subI,subI,1),
+        1)(v,i)
+    def size = 3
+  }
+  object Four extends VectorSpec {
+    /* fastexp E I 4 =                            EVEN
+     * fastexp E Pr[I,I] 2 =                      EVEN
+     * fastexp E Pr[Pr[I,I],Pr[I,I]] 1 =          ODD
+     * fastexp Pr[E,Pr[Pr[I,I],Pr[I,I]]] _ 0 =    ZERO
+     * Pr[E,Pr[Pr[I,I],Pr[I,I]]]
+     */
+     *
+  * fastexp E I 5 =
+  * fastexp EI II 2 =
+  * fastexp EI (II)(II) 1 =
+  * fastexp (EI)((II)(II)) __ 0
+    type T[A] = Pair[Empty, Pr[Pr[Id,Id]#T, Pr[Id,Id]#T]#T, A]
+    def apply[A](f: Int => A): T[A] =
+      mkP[Empty, Pr[Pr[Id,Id]#T, Pr[Id,Id]#T]#T](
+        mkE,
+        mkP[Pr[Id,Id]#T, Pr[Id,Id]#T](
+          mkP(mkI,mkI,1),
+            mkP(mkI,mkI,1),
+          2),
+        0)(f)
+    def sub[A](v: T[A], i: Int): A =
+      subP[Empty, Pr[Pr[Id,Id]#T, Pr[Id,Id]#T]#T](
+        subE,
+        subP[Pr[Id,Id]#T, Pr[Id,Id]#T](
+          subP(subI, subI, 1),
+          subP(subI, subI, 1),
+          2),
+        0)(v,i)
+    def size = 4
+  }
+  */
 }
 
+/*
 object FastExpSquareMatrix extends SquareMatrixFactory {
   import SizedVectors._
 
@@ -222,12 +317,12 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     val dimension = 0
     def sub(subv: Getter[V], subw: Getter[W],
             vsize: Int, wsize: Int, i: Int, j: Int): A =
-      subv(j, subv(i, data))
+      subv(subv(data, i), j)
     override def toString: String = "Zero " + data.toString
   }
 
   /*private*/ case class Odd[V[_],W[_],A]
-      (next: FE_M[Tw[V,W]#T, Tw[W,W]#T, A])
+      (next: FE_M[Pr[V,W]#T, Pr[W,W]#T, A])
   extends FE_M[V,W,A] {
     val dimension = next.dimension*2 + 1
     def sub(subv: Getter[V], subw: Getter[W],
@@ -239,7 +334,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
   }
 
   /*private*/ case class Even[V[_],W[_],A]
-      (next: FE_M[V, Tw[W,W]#T, A])
+      (next: FE_M[V, Pr[W,W]#T, A])
   extends FE_M[V,W,A] {
     val dimension = next.dimension*2
     def sub(subv: Getter[V], subw: Getter[W],
@@ -251,7 +346,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
 
   def oneByOne[A](f:(Int,Int) => A) =
     FE_Matrix(
-      Odd[Empty,Id,A](Zero[Tw[Empty,Id]#T, Tw[Id,Id]#T, A](
+      Odd[Empty,Id,A](Zero[Pr[Empty,Id]#T, Pr[Id,Id]#T, A](
         One(i => One.apply[A](j => f(i,j))))))
 
   def tabulate[A](n: Int)(f:(Int,Int) => A): M[A] = {
@@ -260,13 +355,14 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
       if(k == 0)
         Zero(mkv(i => mkv(j => f(i,j))))
       else if(k%2 == 1)
-        Odd(loop[Tw[V,W]#T, Tw[W,W]#T](
+        Odd(loop[Pr[V,W]#T, Pr[W,W]#T](
           mkP(mkv,mkw,vsize), mkP(mkw,mkw,wsize),
           vsize+wsize, wsize*2, k/2))
       else
-        Even(loop[V, Tw[W,W]#T](
+        Even(loop[V, Pr[W,W]#T](
           mkv, mkP(mkw,mkw,wsize),
           vsize, wsize*2, k/2))
     FE_Matrix(loop(mkE, mkI, 0, 1, n))
   }
 }
+*/

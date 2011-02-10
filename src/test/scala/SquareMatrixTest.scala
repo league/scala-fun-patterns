@@ -63,96 +63,36 @@ object QuadTreeTestParams extends SquareMatrixTestParams {
 object QuadTreeSpec
 extends SquareMatrixSpec(QuadTreeTestParams, "QuadTreeSpec")
 
+
+/*
 object FastExpTestParams extends SquareMatrixTestParams {
   val factory = FastExpSquareMatrix
   val dimension = Gen.choose(0,40)
 }
-
 object FastExpSpec
 extends SquareMatrixSpec(FastExpTestParams, "FastExpSpec")
-
-abstract class SizedVectorSpec(nm: String) extends Properties(nm) {
-  type T[_]
-  def size: Int
-  def mk[A](f: Int => A): T[A]
-  def sub[A](i: Int, v:T[A]): A
-
+abstract class SizedVectorSpec(sv: SizedVectors.VectorSpec,
+                               nm: String) extends Properties(nm) {
   def frob(x: Int) = x * (x+1)
-  val sample = mk(frob)
+  private val sample = sv(frob)
 
-  property("elements") = Prop.forAll(Gen.choose(0,size-1)) {
-    i => sub(i,sample) == frob(i)
+  def borf(i: Int, x: Int) = i + x*x
+  val coord = Gen.choose(0,sv.size-1)
+
+  property("elements") = Prop.forAll(coord) {
+    i => sv.sub(sample,i) == frob(i)
   }
 }
 
-object SingletonVectorSpec extends SizedVectorSpec("singleton") {
-  import SizedVectors._
-  /* fastexp E I 1 = fastexp Tw[E,I] Tw[I,I] 0 = Tw[E,I] */
-  type T[A] = Two[Empty,Id,A]
-  def mk[A](f: Int => A): T[A] = mkP(mkE,mkI,0)(f)
-  def sub[A](i: Int, v: T[A]): A = subP(subE, subI, 0)(i, v)
-  def size = 1
-}
+object VectorOneSpec
+extends SizedVectorSpec(SizedVectors.One, "one")
 
-object PairVectorSpec extends SizedVectorSpec("pair") {
-  import SizedVectors._
-  /* fastexp E I 2 =
-   * fastexp E Tw[I,I] 1 =
-   * fastexp Tw[E,Tw[I,I]] _ 0 =
-   * Tw[E,Tw[I,I]]
-   */
-  type T[A] = Two[Empty,Tw[Id,Id]#T,A]
-  def mk[A](f: Int => A): T[A] = mkP[Empty,Tw[Id,Id]#T](mkE,mkP(mkI,mkI,1),0)(f)
-  def sub[A](i: Int, v: T[A]): A =
-    subP[Empty,Tw[Id,Id]#T](subE, subP(subI, subI, 1), 0)(i,v)
-  def size = 2
-}
+object VectorTwoSpec
+extends SizedVectorSpec(SizedVectors.Two, "two")
 
-object TripleVectorSpec extends SizedVectorSpec("triple") {
-  import SizedVectors._
-  /* fastexp E I 3 =
-   * fastexp Tw[E,I] Tw[I,I] 1 =
-   * fastexp Tw[Tw[E,I],Tw[I,I]] _ 0 =
-   * Tw[Tw[E,I],Tw[I,I]]
-   */
-  type T[A] = Two[Tw[Empty,Id]#T, Tw[Id,Id]#T, A]
-  def mk[A](f: Int => A): T[A] =
-    mkP[Tw[Empty,Id]#T, Tw[Id,Id]#T](
-      mkP(mkE,mkI,0),
-      mkP(mkI,mkI,1),
-      1)(f)
-  def sub[A](i: Int, v: T[A]): A =
-    subP[Tw[Empty,Id]#T, Tw[Id,Id]#T](
-      subP(subE,subI,0),
-      subP(subI,subI,1),
-      1)(i,v)
-  def size = 3
-}
+object VectorThreeSpec
+extends SizedVectorSpec(SizedVectors.Three, "three")
 
-object QuadVectorSpec extends SizedVectorSpec("quad") {
-  import SizedVectors._
-  /* fastexp E I 4 =
-   * fastexp E Tw[I,I] 2 =
-   * fastexp E Tw[Tw[I,I],Tw[I,I]] 1 =
-   * fastexp Tw[E,Tw[Tw[I,I],Tw[I,I]]] _ 0 =
-   * Tw[E,Tw[Tw[I,I],Tw[I,I]]]
-   */
-  type T[A] = Two[Empty, Tw[Tw[Id,Id]#T, Tw[Id,Id]#T]#T, A]
-  def mk[A](f: Int => A): T[A] =
-    mkP[Empty, Tw[Tw[Id,Id]#T, Tw[Id,Id]#T]#T](
-      mkE,
-      mkP[Tw[Id,Id]#T, Tw[Id,Id]#T](
-        mkP(mkI,mkI,1),
-        mkP(mkI,mkI,1),
-        2),
-      0)(f)
-  def sub[A](i: Int, v: T[A]): A =
-    subP[Empty, Tw[Tw[Id,Id]#T, Tw[Id,Id]#T]#T](
-      subE,
-      subP[Tw[Id,Id]#T, Tw[Id,Id]#T](
-        subP(subI, subI, 1),
-        subP(subI, subI, 1),
-        2),
-      0)(i,v)
-  def size = 4
-}
+object VectorFourSpec
+extends SizedVectorSpec(SizedVectors.Four, "four")
+*/
