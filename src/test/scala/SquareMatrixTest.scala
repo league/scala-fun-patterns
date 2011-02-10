@@ -63,7 +63,7 @@ object QuadTreeTestParams extends SquareMatrixTestParams {
 object QuadTreeSpec
 extends SquareMatrixSpec(QuadTreeTestParams, "QuadTreeSpec")
 
-case class SizedVectorSpec[V[+_]](ops: SizedVectors.Ops[V], nm: String)
+class SizedVectorSpec[V[+_]](ops: SizedVectors.Ops[V], nm: String)
 extends Properties(nm) {
   def frob(x: Int) = (x+1) * (x+2)
   private val sample1 = ops(frob)
@@ -82,26 +82,35 @@ extends Properties(nm) {
   property("update") = Prop.forAll(coord) {
     i => val sample3 = ops.update(sample2, i, 9999)
       ops.sub(sample3, i) == 9999 &&
-      Prop.forAll(coord) {
-        j => j != i ==> (ops.sub(sample3,j) == ops.sub(sample2,j))
-      }
+      (ops.size < 2 ||
+       Prop.forAll(coord) {
+         j => j != i ==> (ops.sub(sample3,j) == ops.sub(sample2,j))
+       })
   }
 }
 
-object SizedVectorSpec extends Properties("sized vectors") {
-  property("all") =
-    SizedVectorSpec[SizedVectors.ops1.T](SizedVectors.ops1, "One") &&
-    SizedVectorSpec[SizedVectors.ops2.T](SizedVectors.ops2, "Two") &&
-    SizedVectorSpec[SizedVectors.ops3.T](SizedVectors.ops3, "Three") &&
-    SizedVectorSpec[SizedVectors.ops4.T](SizedVectors.ops4, "Four") &&
-    SizedVectorSpec[SizedVectors.ops5.T](SizedVectors.ops5, "Five")
-}
+object Vector1Spec
+extends SizedVectorSpec[SizedVectors.ops1.T](SizedVectors.ops1, "1")
 
-/*
+object Vector2Spec
+extends SizedVectorSpec[SizedVectors.ops2.T](SizedVectors.ops2, "2")
+
+object Vector3Spec
+extends SizedVectorSpec[SizedVectors.ops3.T](SizedVectors.ops3, "3")
+
+object Vector4Spec
+extends SizedVectorSpec[SizedVectors.ops4.T](SizedVectors.ops4, "4")
+
+object Vector5Spec
+extends SizedVectorSpec[SizedVectors.ops5.T](SizedVectors.ops5, "5")
+
+object Vector6Spec
+extends SizedVectorSpec[SizedVectors.ops6.T](SizedVectors.ops6, "6")
+
 object FastExpTestParams extends SquareMatrixTestParams {
   val factory = FastExpSquareMatrix
   val dimension = Gen.choose(0,40)
 }
+
 object FastExpSpec
 extends SquareMatrixSpec(FastExpTestParams, "FastExpSpec")
-*/

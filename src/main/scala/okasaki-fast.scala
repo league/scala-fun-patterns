@@ -178,80 +178,69 @@ object SizedVectors {
   val ops8  = opsP[ops4.T,ops4a.T](ops4,ops4a)
 }
 
-/*
 object FastExpSquareMatrix extends SquareMatrixFactory {
-  import SizedVectors._
-
-  case class FE_Matrix[A](m: FE_M[Empty,Id,A])
+  sealed abstract class FE_Matrix[V[+_],W[+_],A]
   extends SquareMatrix[A] {
-    type M[A] = FE_Matrix[A]
-    def dimension = m.dimension
-    def apply(i: Int, j: Int): A = m.sub(subE,subI,0,1,i,j)
-    def map[B](f: A => B) = MatrixErrors.notImplemented
-    def updated(i:Int, j: Int, elem: A): M[A] =
-      MatrixErrors.notImplemented
-    override def toString = m.toString
+    type M[A] = FE_Matrix[V,W,A]
   }
 
-  type M[A] = FE_Matrix[A]
-
-  sealed abstract class FE_M[V[_],W[_],A] {
-    def dimension: Int
-    def sub(subv: Getter[V], subw: Getter[W],
-            vsize: Int, wsize: Int, i: Int, j: Int): A
-  }
-
-  /*private*/ case class Zero[V[_],W[_],A](data: V[V[A]])
-  extends FE_M[V,W,A] {
+  /*private*/ case class Zero[V[+_],W[+_],A](
+    data: V[V[A]],
+    ops: SizedVectors.Ops[V])
+  extends FE_Matrix[V,W,A] {
     val dimension = 0
-    def sub(subv: Getter[V], subw: Getter[W],
-            vsize: Int, wsize: Int, i: Int, j: Int): A =
-      subv(subv(data, i), j)
+    def apply(i: Int, j: Int): A =
+      ops.sub(ops.sub(data, i), j)
+    def updated(i: Int, j: Int, elem: A) = {
+      val before = ops.sub(data, i)
+      val after = ops.update(before, j, elem)
+      Zero(ops.update(data, i, after), ops)
+    }
+    def map[B](f: A => B): M[B] =
+      Zero(ops.map(data, (i, row:V[A]) =>
+        ops.map(row, (j, elt:A) => f(elt))), ops)
     override def toString: String = "Zero " + data.toString
   }
 
-  /*private*/ case class Odd[V[_],W[_],A]
-      (next: FE_M[Pr[V,W]#T, Pr[W,W]#T, A])
-  extends FE_M[V,W,A] {
+  /*private*/ case class Odd[V[+_],W[+_],A](
+    next: FE_Matrix[SizedVectors.Pr[V,W]#T, SizedVectors.Pr[W,W]#T, A])
+  extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2 + 1
-    def sub(subv: Getter[V], subw: Getter[W],
-            vsize: Int, wsize: Int, i: Int, j: Int): A =
-      next.sub(subP(subv,subw,vsize),
-               subP(subw,subw,wsize),
-               vsize+wsize, wsize+wsize, i, j)
+    def apply(i: Int, j: Int): A = next(i,j)
+    def updated(i: Int, j: Int, elem: A) =
+      Odd(next.updated(i,j,elem))
+    def map[B](f: A => B): M[B] =
+      Odd(next.map(f))
     override def toString: String = "Odd " + next.toString
   }
 
-  /*private*/ case class Even[V[_],W[_],A]
-      (next: FE_M[V, Pr[W,W]#T, A])
-  extends FE_M[V,W,A] {
+  /*private*/ case class Even[V[+_],W[+_],A](
+    next: FE_Matrix[V, SizedVectors.Pr[W,W]#T, A])
+  extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2
-    def sub(subv: Getter[V], subw: Getter[W],
-            vsize: Int, wsize: Int, i: Int, j: Int): A =
-      next.sub(subv, subP(subw,subw,wsize),
-               vsize, wsize*2, i, j)
+    def apply(i: Int, j: Int): A = next(i,j)
+    def updated(i: Int, j: Int, elem: A) =
+      Even(next.updated(i,j,elem))
+    def map[B](f: A => B): M[B] =
+      Even(next.map(f))
     override def toString: String = "Even " + next.toString
   }
 
-  def oneByOne[A](f:(Int,Int) => A) =
-    FE_Matrix(
-      Odd[Empty,Id,A](Zero[Pr[Empty,Id]#T, Pr[Id,Id]#T, A](
-        One(i => One.apply[A](j => f(i,j))))))
+  type M[A] = FE_Matrix[SizedVectors.Empty, SizedVectors.Id,A]
 
   def tabulate[A](n: Int)(f:(Int,Int) => A): M[A] = {
-    def loop[V[_],W[_]](mkv: Maker[V], mkw: Maker[W],
-                        vsize: Int, wsize: Int, k: Int): FE_M[V,W,A] =
+    def loop[V[+_],W[+_]](opsV: SizedVectors.Ops[V],
+                          opsW: SizedVectors.Ops[W],
+                          k: Int): FE_Matrix[V,W,A] =
       if(k == 0)
-        Zero(mkv(i => mkv(j => f(i,j))))
+        Zero(opsV(i => opsV(j => f(i,j))), opsV)
       else if(k%2 == 1)
-        Odd(loop[Pr[V,W]#T, Pr[W,W]#T](
-          mkP(mkv,mkw,vsize), mkP(mkw,mkw,wsize),
-          vsize+wsize, wsize*2, k/2))
+        Odd(loop[SizedVectors.Pr[V,W]#T, SizedVectors.Pr[W,W]#T](
+          SizedVectors.opsP(opsV,opsW),
+          SizedVectors.opsP(opsW,opsW), k/2))
       else
-        Even(loop[V, Pr[W,W]#T](
-          mkv, mkP(mkw,mkw,wsize),
-          vsize, wsize*2, k/2))
-    FE_Matrix(loop(mkE, mkI, 0, 1, n))
+        Even(loop[V, SizedVectors.Pr[W,W]#T](
+          opsV, SizedVectors.opsP(opsW,opsW), k/2))
+    loop(SizedVectors.opsE, SizedVectors.opsI, n)
   }
 }
-*/
