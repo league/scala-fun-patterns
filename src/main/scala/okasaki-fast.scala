@@ -216,12 +216,12 @@ object SizedVectors {
     beneath the `Zero` constructor. */
 
 object FastExpSquareMatrix extends SquareMatrixFactory {
-  sealed abstract class FE_Matrix[V[+_],W[+_],A]
+  sealed trait FE_Matrix[V[+_],W[+_],A]
   extends SquareMatrix[A] {
     type M[A] = FE_Matrix[V,W,A]
   }
 
-  private case class Zero[V[+_],W[+_],A](
+  private final case class Zero[V[+_],W[+_],A](
     data: V[V[A]],
     ops: SizedVectors.Ops[V])
   extends FE_Matrix[V,W,A] {
@@ -239,7 +239,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     override def toString: String = "Zero " + data.toString
   }
 
-  private case class Odd[V[+_],W[+_],A](
+  private final case class Odd[V[+_],W[+_],A](
     next: FE_Matrix[SizedVectors.Pr[V,W]#T, SizedVectors.Pr[W,W]#T, A])
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2 + 1
@@ -251,7 +251,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     override def toString: String = "Odd " + next.toString
   }
 
-  private case class Even[V[+_],W[+_],A](
+  private final case class Even[V[+_],W[+_],A](
     next: FE_Matrix[V, SizedVectors.Pr[W,W]#T, A])
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2
