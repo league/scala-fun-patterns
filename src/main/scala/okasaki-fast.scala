@@ -1,3 +1,9 @@
+/* Scala code for Chris Okasaki's 1999 ICFP paper,
+ * "From Fast Exponentiation to Square Matrices"
+ *
+ * Copyright ©2011 Christopher League <league@contrapunctus.net>
+ * Creative Commons Attribution License
+ */
 
 /** Operations on general 2D matrices. */
 trait Matrix[A] extends Function2[Int,Int,A] {
@@ -46,6 +52,10 @@ object MatrixErrors {
   def outOfBounds = error("out of bounds")
   def notImplemented = error("not implemented")
 }
+
+/** Square matrices based on quad trees.  Simpler to understand than
+    fast-exponentiation version, but with the limitation that
+    dimension must be a power of two. */
 
 object QuadTreeSquareMatrix extends SquareMatrixFactory {
 
@@ -112,6 +122,8 @@ object QuadTreeSquareMatrix extends SquareMatrixFactory {
   }
 }
 
+/** Logarithmic representations of vectors that encode the size as
+    part of the type. */
 object SizedVectors {
   /* Could implement these with case classes, but want to keep them
      very lightweight: just nested pairs with no superfluous
@@ -125,6 +137,7 @@ object SizedVectors {
     type T[+A] = Pair[V,W,A]
   }
 
+  /** Interface for a package of operations on a fixed-size vector. */
   trait Ops[TT[+_]] {
     type T[+A] = TT[A]
     def size: Int
@@ -134,6 +147,7 @@ object SizedVectors {
     def update[A,B>:A](v: T[A], i: Int, x: B): T[B]
   }
 
+  /** Implementations for the empty vector. */
   val opsE = new Ops[Empty] {
     val size = 0
     def apply[A](f: Int => A) = ()
@@ -142,6 +156,7 @@ object SizedVectors {
     def update[A,B>:A](v: T[A], i: Int, x: B) = ()
   }
 
+  /** Implementations for the singleton vector. */
   val opsI = new Ops[Id] {
     val size = 1
     def apply[A](f: Int => A) = f(0)
@@ -151,6 +166,9 @@ object SizedVectors {
     def update[A,B>:A](v: T[A], i: Int, x: B) = sub(x,i)
   }
 
+  /** Construct implementation based on a pair of smaller vectors.
+      Larger sizes will be composed using the fast-exponentiation
+      analogy. */
   case class opsP[V[+_],W[+_]](opsV: Ops[V], opsW: Ops[W])
   extends Ops[Pr[V,W]#T] {
     val size = opsV.size + opsW.size
@@ -169,6 +187,17 @@ object SizedVectors {
         (v._1, opsW.update(v._2, i - opsV.size, x))
   }
 
+  /** Some encodings of small vectors, for testing.  Except for those
+      suffixed with `a` (which are intermediate representations),
+      these follow the fast exponentiation algorithm, which is
+      summarized as:
+         fastexp N = fastexp Empty Id N
+      where
+         fastexp’ V W 0 = V
+         fastexp’ V W K = fastexp’ V (W,W) K/2  if K even
+         fastexp’ V W K = fastexp’ (V,W) (W,W) K/2  if K odd
+    */
+
   val ops1  = opsP(opsE,opsI)
   val ops2a = opsP(opsI,opsI)
   val ops2  = opsP[Empty,ops2a.T](opsE,ops2a)
@@ -181,13 +210,18 @@ object SizedVectors {
   val ops8  = opsP[ops4.T,ops4a.T](ops4,ops4a)
 }
 
+/** Square matrices based on two-dimensional sized vectors.  The
+    datatype will have a "header" of even/odd constructors, building
+    up the types to the properly-sized vectors.  All the data appear
+    beneath the `Zero` constructor. */
+
 object FastExpSquareMatrix extends SquareMatrixFactory {
   sealed abstract class FE_Matrix[V[+_],W[+_],A]
   extends SquareMatrix[A] {
     type M[A] = FE_Matrix[V,W,A]
   }
 
-  /*private*/ case class Zero[V[+_],W[+_],A](
+  private case class Zero[V[+_],W[+_],A](
     data: V[V[A]],
     ops: SizedVectors.Ops[V])
   extends FE_Matrix[V,W,A] {
@@ -205,7 +239,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     override def toString: String = "Zero " + data.toString
   }
 
-  /*private*/ case class Odd[V[+_],W[+_],A](
+  private case class Odd[V[+_],W[+_],A](
     next: FE_Matrix[SizedVectors.Pr[V,W]#T, SizedVectors.Pr[W,W]#T, A])
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2 + 1
@@ -217,7 +251,7 @@ object FastExpSquareMatrix extends SquareMatrixFactory {
     override def toString: String = "Odd " + next.toString
   }
 
-  /*private*/ case class Even[V[+_],W[+_],A](
+  private case class Even[V[+_],W[+_],A](
     next: FE_Matrix[V, SizedVectors.Pr[W,W]#T, A])
   extends FE_Matrix[V,W,A] {
     val dimension = next.dimension*2
