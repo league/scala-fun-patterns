@@ -44,12 +44,11 @@ object FormatExamples extends Application {
   import FormatCombinators._
   import Function.uncurried
 
-  val red = 255
-  val green = 24
-  val blue = 37
-  val name = "Chris"
+  val toHex = uncurried("#" % x % x % x sprintf)
+  val greeting = "Hello, " % s % n printf
 
-  "Hello, " % s % n printf name
-  val color = uncurried("#" % x % x % x sprintf)(red, green, blue)
-  "Roses are " % s % n % s % n printf color apply (new Date)
+  greeting("Chris")
+  greeting("NEScala")
+
+  "Roses are " % s % n % s % n printf toHex(255,24,37) apply (new Date)
 }
