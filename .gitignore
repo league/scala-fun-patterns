@@ -2,3 +2,14 @@
 project/boot/
 target/
 lib_managed/
+*.toc
+*.nav
+*.out
+*.snm
+*.aux
+*.log
+*.dvi
+*.ps
+*.vrb
+*.bm
+.auctex/
