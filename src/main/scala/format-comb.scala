@@ -5,45 +5,51 @@ trait Compose[F[_],G[_]] { type T[X] = F[G[X]] }
 
 object Format {
   /* Buffer representation; could be abstracted out. */
-  type Elem = String
-  type Buf = List[Elem]
-  type Result = String
-  def put(b: Buf, e: Elem): Buf = e :: b
-  def finish(b: Buf): Result = b.reverse.mkString
+  type Buf = List[String]
+  def put(b: Buf, e: String): Buf = e :: b
+  def finish(b: Buf): String = b.reverse.mkString
   def initial: Buf = Nil
 
   /* The basic mechanism: composable fragments with an abstract type
      constructors that can add parameters. */
-  type Cont[R] = Buf => R
+  type Cont[A] = Buf => A
   trait Fragment[F[_]] {
-    def run[R](k: Cont[R]): Cont[F[R]]
+    def apply[A](k: Cont[A]): Cont[F[A]]
 
     def & [G[_]] (g: Fragment[G]) = new Fragment[Compose[F,G]#T] {
-      def run[R](k: Cont[R]) =
-        Fragment.this.run(g.run(k))
+      def apply[A](k: Cont[A]) =
+        Fragment.this(g(k))
     }
 
-    def | : F[Result] = run(finish(_))(initial)
+    def | : F[String] = apply(finish(_))(initial)
     def |> (ps: PrintStream): F[Unit] =
-      run{b:Buf => ps.print(finish(b))}(initial)
+      apply{b:Buf => ps.print(finish(b))}(initial)
     def |> : F[Unit] = |> (Console.out)
   }
 
   /* Combinators that don't add parameters are called "glue". */
-  type Id[R] = R
+  type Id[A] = A
   case class Glue(s: String) extends Fragment[Id] {
-    def run[R](k: Cont[R]): Cont[R] = (b:Buf) => k(put(b,s))
+    def apply[A](k: Cont[A]): Cont[A] = (b:Buf) => k(put(b,s))
   }
 
   implicit def literalString(s:String) = Glue(s)
   val endl = Glue("\n")
+
+  /* as presented in talk: */
+  /*implicit*/ def lit(s:String) = new Fragment[Id] {
+    def apply[A](k: Cont[A]) = (b:Buf) => k(put(b,s))
+  }
+  val xx = new Fragment[IntF] {
+    def apply[A](k: Cont[A]) = (b:Buf) => (i:Int) => k(put(b,i.toHexString))
+  }
 
   /* Combinators for base types. */
 
   trait F1[A] { type T[R] = A => R }
 
   def preprocess[A](f: A => String) = new Fragment[F1[A]#T] {
-      def run[R](k: Cont[R]) =
+      def apply[R](k: Cont[R]) =
         (b: Buf) => (a: A) => k(put(b, f(a)))
   }
 
@@ -67,21 +73,35 @@ object Format {
   val cur: Fragment[DoubleF] =
     preprocess(NumberFormat.getCurrencyInstance.format(_))
 
-  trait Pr[A,B,F[_],G[_]] { type T[R] = (F[A],G[B]) => R }
-  def pr[A,B,F[_],G[_]](f: Fragment[F], g: Fragment[G]) =
-    new Fragment[Pr[A,B,F,G]#T] {
-      def run[R](k: Cont[R]) = {
-        (b: Buf) => (p: (A,B)) =>
-          val s1 = f|p._1
-          val s2 = g|p._2
-          k(put(put(b,s1),s2))
-      }
-    }
+  import java.util.Formatter
+  val juf = new Formatter
+  def f(prec: Int): Fragment[FloatF] = {
+    val fms = "%." & i & "f" | prec
+    def fmt(x:Float) =
+      juf.format(fms, x.asInstanceOf[AnyRef]).toString
+    preprocess(fmt)
+  }
 }
 
 object FormatExamples extends Application {
   import Format._
   import Function.uncurried
+
+  val a = 5
+  val b = 2
+  val c = a / b.toFloat
+
+  val frac: Int => Int => Float => String =
+    d & " over " & d & " is " & f(2) & endl |
+
+  val grade: Any => Double => Unit =
+    "Hello, "& s& ": your exam score is "& pct& endl |>
+
+  val hex: (Int, Int, Int) => String = uncurried("#"&x&x&x|)
+
+  println(uncurried(frac)(a,b,c))
+  grade("Joshua")(0.97)
+  println("Roses are "&s | hex(250, 21, 42))
 
   val toHex = uncurried("#" & x & x & x |)
   val greeting = "Hello, " & s & endl |>
