@@ -14,7 +14,7 @@ xcolornames=x11names,svgnames,dvipsnames]{beamer}
 \setbeamersize{text margin left=10mm}
 %%%_** Fancy fonts
 \setbeamerfont{frametitle}{series=\bfseries}
-\setmainfont[Mapping=tex-text]{Adobe Caslon Pro}
+\setmainfont[Mapping=tex-text]{Warnock Pro}
 \setsansfont[Mapping=tex-text,Numbers={OldStyle}]{Cronos Pro}
 \setmonofont[Mapping=tex-text]{Inconsolata}
 \newcommand{\wackyFont}[1]{
@@ -82,7 +82,7 @@ xcolornames=x11names,svgnames,dvipsnames]{beamer}
 }
 \lstdefinestyle{scala}{
   language=scala,
-  numbers=left,
+  numbers=none,
   numberstyle=\tiny, 
   numbersep=5pt,
   delim=[is][\color{hole}\colorbox{hole}]{(/)}{(/)},
@@ -221,12 +221,7 @@ res0: Boolean = true
 \end{frame}
 
 \begin{frame}
-  \frametitle{Pattern 1: Continuations}
-  A \textbf{continuation} is an argument that represents\\ the
-  \emph{rest} of the computation meant to occur\\after the current
-  function.
-  \bigskip
-
+  \frametitle{Pay it forward\dots}
   Current function can `return' a value\\by passing it as a
   \textit{parameter} to its continuation.
 \end{frame}
@@ -253,11 +248,12 @@ yes
 
 \begin{frame}
   \frametitle{Delimited continuations}
+  \bigskip
   \begin{description}
+  \item[reset] Serves as delimiter for CPS transformation.\medskip
   \item[shift] Captures current continuation as a function\\
     (up to dynamically-enclosing \emph{reset})\\
     then runs specified block instead.
-  \item[reset] Serves as delimiter for CPS transformation.
   \end{description}
 \end{frame}
 
@@ -440,9 +436,7 @@ def s(k:Buf=>A)(b:Buf)(o:Any) = k(put(b,o.toString))
     \lstinline!lit("L")(finish)(initial)!
     &$\leadsto$& \lstinline!"L"!\\
     \lstinline!x(finish)(initial)(42)!
-    &$\leadsto$& \lstinline!"2a"!\\
-    \lstinline!s(finish)(initial)("@")!
-    &$\leadsto$& \lstinline!"@"!\\
+    &$\leadsto$& \lstinline!"2a"!
   \end{tabular}
   \end{center}
 where:
@@ -457,14 +451,17 @@ where:
 \begin{frame}[fragile]
   \frametitle{Function composition}
   \begin{alltt}\small
-(s \verb+&+ lit("L") \verb+&+ x) (finish) (initial) ("@") (42) \(\leadsto\)    
-
-s(lit("L")(\textcolor{input}{x}(finish))) (initial) ("@") (42) \(\leadsto\)
-
-s(\textcolor{input}{lit("L")}(\textcolor{emph}{\(\lambda\)b0.\(\lambda\)i.finish(i.toHex :: b0)})) \dots \(\leadsto\)
-
-\textcolor{input}{s}(\(\lambda\)b1.\(\lambda\)i.finish(i.toHex :: "L" :: b1)) \dots \(\leadsto\) \dots
+ (lit("L") \verb+&+ x) (finish) (initial) (2815)
+\(\leadsto\)
+ lit("L")(x(finish)) (initial) (2815)
+\(\leadsto\)
+ lit("L")(\(\lambda\)b0.\(\lambda\)i.finish(i.toHex :: b0)) (initial) (2815)
+\(\leadsto\)
+ (\(\lambda\)b1.\(\lambda\)i.finish(i.toHex :: "L" :: b1)) (initial) (2815)
+    \(\leadsto\) finish(2815.toHex :: "L" :: initial)
+        \(\leadsto\) List("aff","L").reverse.mkString \(\leadsto\) "Laff"
 \end{alltt}
+\vskip-5mm
 where:
 \begin{lstlisting}[style=scala,moreemph={Buf}]
 def lit(m:String)(k:Buf=>A)(b:Buf) = k(put(b,m))
@@ -474,46 +471,19 @@ def s(k:Buf=>A)(b:Buf)(o:Any) = k(put(b,o.toString))
 \end{frame}
 
 \begin{frame}[fragile]
-  \frametitle{Function composition}
-  \begin{alltt}\small\color{result}
-(s \verb+&+ lit("L") \verb+&+ x) (finish) (initial) ("@") (42) \(\leadsto\)    
-
-s(lit("L")({x}(finish))) (initial) ("@") (42) \(\leadsto\)
-
-s({lit("L")}({\(\lambda\)b0.\(\lambda\)i.finish(i.toHex :: b0)})) \dots \(\leadsto\)
-
-{s}(\(\lambda\)b1.\(\lambda\)i.finish(i.toHex :: "L" :: b1)) \dots \(\leadsto\)
-
-\color{black}\(\lambda\)b2.\(\lambda\)o.\(\lambda\)i.finish(i.toHex :: "L" :: o.toStr :: b2) \dots \(\leadsto\)
-
-finish(42.toHex :: "L" :: "@".toStr :: initial) \(\leadsto\)
-List("2a", "L", "@").reverse.mkString \(\leadsto\)
-"@L2a"
-  \end{alltt}
-\end{frame}
-
-\begin{frame}[fragile]
   \frametitle{Combinator polymorphism}
   What is the \emph{answer type}?
-  Consider: \texttt{x(x(x(finish)))}
 \medskip
 
-  {\small
-    \begin{tabular}[t]{ll}
-      where \hfill \texttt{x}: & $\forall$\texttt{A.(Buf => A) => Buf => Int => A}
+    \begin{tabular}[t]{rl}
+      \texttt{x}: & $\forall$\texttt{A.(Buf => A) => Buf => Int => A}
       \\
-      \hfill\texttt{finish}: &\texttt{Buf => String}\\
-      \\
-    Inner \texttt{x} instantiates: &\texttt{A} $\equiv$ \texttt{String}\\
-    \\
-    Inner \texttt{x} produces: &\texttt{Buf => Int => String}\\
-    Middle \texttt{x} instantiates: &\texttt{A} $\equiv$ \texttt{Int => String}\\
-    \\
-    Middle \texttt{x} produces: &\texttt{Buf => Int => Int => String}\\
-    Outer \texttt{x} instantiates: &\texttt{A} $\equiv$ \texttt{Int => Int => String}\\
-    \\
-    Outer \texttt{x} produces: &\texttt{Buf => Int => Int => Int => String}
-  \end{tabular}}
+      \hfill\texttt{finish}: &\texttt{Buf => String}
+  \end{tabular}
+
+\begin{center}
+  \includegraphics[scale=.42]{typeapp}
+\end{center}
 
 \end{frame}
 
@@ -551,7 +521,7 @@ val x = new Fragment[IntF] {
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{frame}[fragile]
   \frametitle{Pattern 3: Nested data types}
-  Usually, polymorphic recursive data type is instantiated
+  Usually, a polymorphic recursive data type\\ is instantiated
   \emph{uniformly} throughout:
 \begin{lstlisting}[style=scala]
 trait List[A]
@@ -559,12 +529,6 @@ case class Nil[A]() extends List[A]
 case class Cons[A](hd:A, tl:List[A]) extends List[A]
 \end{lstlisting}
   What if type parameter of recursive invocation differs?
-\begin{lstlisting}[style=scala,moreemph={Weird}]
-trait Weird[A]
-case class Wil[A]() extends Weird[A]
-case class Wons[A](hd: A, tl: Weird[(A,A)])
-extends Weird[A] // tail of Weird[A] is Weird[(A,A)]
-\end{lstlisting}
 \end{frame}
 
 \begin{frame}[fragile]
@@ -597,10 +561,11 @@ type I8 = (I4,I4)
     \lstinline!Vector[Vector[A]]! is a two-dimensional matrix\\
     of elements of type A.
   \item But lengths of rows (inner vectors) could differ.
-  \item Using nested data types, recursively build a type constructor
-    \lstinline!V[_]! to represent a sequence of a \emph{fixed} number of
+  \item Using nested data types, recursively build\\a type constructor
+    \lstinline!V[_]! to represent a sequence\\of a \emph{fixed} number of
     elements.
-  \item Then, \lstinline!V[V[A]]! is a square matrix.
+  \item Then, \lstinline!Vector[V[A]]! is a well-formed matrix,\\and
+    \lstinline!V[V[A]]! is square.
   \end{itemize}
 \end{frame}
 
@@ -629,22 +594,22 @@ m2: FastExpSquareMatrix.M[Int] =
 \begin{frame}
   \frametitle{Analogy with fast exponentiation}
   \begin{array}[t]{lcll}
-    \mathrm{fastexp}\; r\; b\; 0&=& r &\\
-    \mathrm{fastexp}\; r\; b\; n&=&
-    \mathrm{fastexp}\; r\; (b^2)\; \lfloor n/2\rfloor
-    &\mathrm{if}\;n\;\mathrm{even}\\
-    \mathrm{fastexp}\; r\; b\; n&=&
-    \mathrm{fastexp}\; (r\cdot b)\; (b^2)\; \lfloor n/2\rfloor
-    &\mathrm{otherwise}
+    \textrm{fastexp}\; r\; b\; 0&=& r &\\
+    \textrm{fastexp}\; r\; b\; n&=&
+    \textrm{fastexp}\; r\; (b^2)\; \lfloor n/2\rfloor
+    &\textrm{if}\;n\;\textrm{even}\\
+    \textrm{fastexp}\; r\; b\; n&=&
+    \textrm{fastexp}\; (r\cdot b)\; (b^2)\; \lfloor n/2\rfloor
+    &\textrm{otherwise}
   \end{array}\medskip
 
 For example:
 
   \begin{array}[t]{l@{\qquad\qquad}c}
-    \mathrm{fastexp}\;1\;b\;6 = &\mathbf{EVEN}\\
-    \mathrm{fastexp}\;1\;(b^2)\;3 =&\mathbf{ODD}\\
-    \mathrm{fastexp}\;(1\cdot b^2)\;({b^2}^2)\;1 =&\mathbf{ODD}\\
-    \mathrm{fastexp}\;(1\cdot b^2\cdot {b^2}^2)\;({{b^2}^2}^2)\;0 =&\mathbf{ZERO}\\
+    \textrm{fastexp}\;1\;b\;6 = &\textbf{Even}\\
+    \textrm{fastexp}\;1\;(b^2)\;3 =&\textbf{Odd}\\
+    \textrm{fastexp}\;(1\cdot b^2)\;({b^2}^2)\;1 =&\textbf{Odd}\\
+    \textrm{fastexp}\;(1\cdot b^2\cdot {b^2}^2)\;({{b^2}^2}^2)\;0 =&\textbf{Zero}\\
     1\cdot b^2\cdot{b^2}^2
   \end{array}
 \end{frame}
@@ -654,10 +619,10 @@ For example:
 \begin{lstlisting}[style=scalarepl,moreemph={U,I}]
 type U = Unit
 type I = Int
-fastExp U I 6 =                            // EVEN
-fastExp U (I,I) 3 =                        // ODD
-fastExp (U,(I,I)) ((I,I),(I,I)) 1 =        // ODD
-fastExp ((U,(I,I)),((I,I),(I,I)))          // ZERO
+fastExp U I 6 =                            // Even
+fastExp U (I,I) 3 =                        // Odd
+fastExp (U,(I,I)) ((I,I),(I,I)) 1 =        // Odd
+fastExp ((U,(I,I)),((I,I),(I,I)))          // Zero
         (((I,I),(I,I)),((I,I),(I,I))) 0 = 
 ((U,(I,I)),((I,I),(I,I)))
 \end{lstlisting}
